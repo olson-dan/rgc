@@ -79,7 +79,7 @@ impl epi::App for App {
                 let mut preformatted = false;
                 for line in self.contents.lines() {
                     if line.starts_with("#") {
-                        ui.heading(line.trim_start_matches('#'));
+                        ui.heading(line.trim_start_matches('#').trim_start());
                     } else if line.starts_with("=>") {
                         let mut splits = line.splitn(3, |c: char| c.is_whitespace());
                         let _ = splits.next();
@@ -91,7 +91,7 @@ impl epi::App for App {
                     } else if line.starts_with("```") {
                         preformatted = !preformatted;
                     } else if preformatted {
-                        ui.code(line);
+                        ui.monospace(line);
                     } else {
                         ui.label(line);
                     }
