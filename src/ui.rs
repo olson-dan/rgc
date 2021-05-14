@@ -24,15 +24,13 @@ pub struct App {
 }
 
 impl App {
-    fn go_to_url(&mut self, mut url: String) {
-        if url.starts_with("/") {
-            url = self.url.clone() + &url;
-        }
+    fn go_to_url(&mut self, url: String) {
+        let previous_url = self.url_stack.last().cloned().unwrap_or_default();
         let mut state = self.state.lock().unwrap();
         *state.deref_mut() = AppState::Loading;
         let task_state = self.state.clone();
         async_std::task::spawn(async move {
-            let (url, contents) = request(&url).await;
+            let (url, contents) = request(&previous_url, &url).await;
             let mut state = task_state.lock().unwrap();
             *state.deref_mut() = AppState::NewContent(url, contents);
         });

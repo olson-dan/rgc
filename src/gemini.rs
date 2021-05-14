@@ -1,8 +1,7 @@
 use async_native_tls::TlsConnector;
 use async_std::net::TcpStream;
 use async_std::prelude::*;
-use url_escape::encode_fragment;
-use urlparse::urlparse;
+use url::Url;
 
 #[derive(Debug)]
 pub enum GeminiStatus {
@@ -12,19 +11,19 @@ pub enum GeminiStatus {
     TemporaryFailure(u32, String),
     PermanentFailure(u32, String),
     ClientCertificateRequired(u32, String),
-    InvalidResponse,
+    InvalidResponse(String),
 }
 
 impl GeminiStatus {
     pub fn from_response(response: &str) -> GeminiStatus {
-        if response.len() < 3 {
-            return GeminiStatus::InvalidResponse;
+        if response.len() < 2 {
+            return GeminiStatus::InvalidResponse(response.to_string());
         }
         let (code, meta) = response.split_at(2);
         let code = if let Ok(val) = code.parse::<u32>() {
             val
         } else {
-            return GeminiStatus::InvalidResponse;
+            return GeminiStatus::InvalidResponse(response.to_string());
         };
         let meta = String::from(meta.trim());
         if code >= 10 && code < 20 {
@@ -40,7 +39,7 @@ impl GeminiStatus {
         } else if code >= 60 && code < 70 {
             GeminiStatus::ClientCertificateRequired(code, meta)
         } else {
-            GeminiStatus::InvalidResponse
+            GeminiStatus::InvalidResponse(response.to_string())
         }
     }
 
@@ -49,15 +48,21 @@ impl GeminiStatus {
     }
 }
 
-pub async fn request(url: &str) -> (String, String) {
-    println!("{}", url);
-    let mut url = encode_fragment(&url).to_string();
-    if !url.contains("://") {
-        url = format!("gemini://{}", url);
-    }
+pub async fn request(base: &str, url: &str) -> (String, String) {
+    let mut url = url.to_string();
+    let parsed_url = if base.is_empty() {
+        if !url.contains("://") {
+            url = format!("gemini://{}", url);
+        }
+        Url::parse(&url).unwrap()
+    } else {
+        let parsed_base = Url::parse(base).unwrap();
+        parsed_base.join(&url).unwrap()
+    };
+    let url = parsed_url.to_string();
+    let host = parsed_url.host_str().unwrap();
 
-    let parsed_url = urlparse(&url);
-    let stream = match TcpStream::connect(format!("{}:1965", parsed_url.netloc)).await {
+    let stream = match TcpStream::connect(format!("{}:1965", host)).await {
         Ok(s) => s,
         Err(e) => {
             return (
@@ -69,7 +74,7 @@ pub async fn request(url: &str) -> (String, String) {
     let mut stream = match TlsConnector::new()
         .use_sni(true)
         .danger_accept_invalid_certs(true)
-        .connect(&parsed_url.netloc, stream)
+        .connect(host, stream)
         .await
     {
         Ok(s) => s,
