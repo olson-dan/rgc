@@ -84,14 +84,14 @@ impl epi::App for App {
                 if scroll_to_top {
                     ui.scroll_to_cursor(Align::TOP);
                 }
-                if self.mimetype == "text/gemini" {
+                if self.mimetype.starts_with("text/gemini") {
                     let mut preformatted = false;
                     for line in self.contents.lines() {
                         if line.starts_with("#") {
                             ui.heading(line.trim_start_matches('#').trim_start());
                         } else if line.starts_with("=>") {
-                            let mut splits = line.splitn(3, |c: char| c.is_whitespace());
-                            let _ = splits.next();
+                            let line = line.trim_start_matches("=>").trim();
+                            let mut splits = line.splitn(2, |c: char| c.is_whitespace());
                             let url = splits.next().unwrap_or_default().trim();
                             let label = splits.next().unwrap_or(url).trim();
                             if ui.hyperlink_to(label, url).clicked() {
