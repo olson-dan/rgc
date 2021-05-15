@@ -36,13 +36,10 @@ impl<'a> GeminiStatus<'a> {
             _ => GeminiStatus::InvalidResponse(response),
         }
     }
-
-    pub fn success(&self) -> bool {
-        matches!(self, GeminiStatus::Success(_, _))
-    }
 }
 
-pub async fn request(base: &str, url: &str) -> (String, String) {
+pub async fn request(base: &str, url: &str) -> (String, String, String) {
+    let plain = "text/plain".to_string();
     let mut url = url.to_string();
     let parsed_url = if base.is_empty() {
         if !url.contains("://") {
@@ -61,6 +58,7 @@ pub async fn request(base: &str, url: &str) -> (String, String) {
         Err(e) => {
             return (
                 url.clone(),
+                plain,
                 format!("Could connect to server: {}\n{:?}", url, e),
             )
         }
@@ -75,6 +73,7 @@ pub async fn request(base: &str, url: &str) -> (String, String) {
         Err(e) => {
             return (
                 url.clone(),
+                plain,
                 format!("Could not get TLS certificate for URL {}\n{:?}", url, e),
             )
         }
@@ -82,32 +81,35 @@ pub async fn request(base: &str, url: &str) -> (String, String) {
 
     match stream.write_all(format!("{}\r\n", url).as_bytes()).await {
         Ok(_) => {}
-        Err(e) => return (url, format!("Error writing to socket: {:?}", e)),
+        Err(e) => return (url, plain, format!("Error writing to socket: {:?}", e)),
     };
 
     let mut res = Vec::new();
     match stream.read_to_end(&mut res).await {
         Ok(_) => {}
-        Err(e) => return (url, format!("Error reading from socket: {:?}", e)),
+        Err(e) => return (url, plain, format!("Error reading from socket: {:?}", e)),
     };
 
     let response = String::from_utf8_lossy(&res);
     if let Some((response, contents)) = response.split_once("\r\n") {
         let status = GeminiStatus::from_response(response);
-        if status.success() {
-            (url, String::from(contents))
-        } else {
-            return (
+        match status {
+            GeminiStatus::Success(_, meta) => {
+                (url, meta.trim().to_string(), String::from(contents))
+            }
+            _ => (
                 url.clone(),
+                plain,
                 format!(
                     "Unexpected response from server loading URL: {}\n{:?}",
                     url, status
                 ),
-            );
+            ),
         }
     } else {
         (
             url.clone(),
+            plain,
             format!("Invalid response from server loading URL: {}", url),
         )
     }

@@ -1,12 +1,13 @@
 use crate::gemini::request;
 use eframe::{egui, epi};
+use egui::output::OpenUrl;
 use std::sync::{Arc, Mutex};
 
 #[derive(PartialEq, Eq)]
 enum AppState {
     Browsing,
     Loading,
-    NewContent(String, String),
+    NewContent(String, String, String),
 }
 
 impl Default for AppState {
@@ -19,6 +20,7 @@ pub struct App {
     url_stack: Vec<String>,
     url: String,
     contents: String,
+    mimetype: String,
     state: Arc<Mutex<AppState>>,
 }
 
@@ -29,9 +31,9 @@ impl App {
         *state = AppState::Loading;
         let task_state = self.state.clone();
         async_std::task::spawn(async move {
-            let (url, contents) = request(&previous_url, &url).await;
+            let (url, mimetype, contents) = request(&previous_url, &url).await;
             let state = &mut *task_state.lock().unwrap();
-            *state = AppState::NewContent(url, contents);
+            *state = AppState::NewContent(url, mimetype, contents);
         });
     }
 }
@@ -42,10 +44,11 @@ impl epi::App for App {
         let mut goto_url = None;
         {
             let state = &mut *self.state.lock().unwrap();
-            if let AppState::NewContent(url, content) = state {
+            if let AppState::NewContent(url, mimetype, content) = state {
                 self.url = url.clone();
                 self.url_stack.push(self.url.clone());
                 self.contents = content.clone();
+                self.mimetype = mimetype.clone();
                 *state = AppState::Browsing;
             } else if AppState::Loading == *state {
                 loading = true;
@@ -75,32 +78,32 @@ impl epi::App for App {
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::auto_sized().show(ui, |ui| {
-                let mut preformatted = false;
-                for line in self.contents.lines() {
-                    if line.starts_with("#") {
-                        ui.heading(line.trim_start_matches('#').trim_start());
-                    } else if line.starts_with("=>") {
-                        let mut splits = line.splitn(3, |c: char| c.is_whitespace());
-                        let _ = splits.next();
-                        let url = splits.next().unwrap_or_default().trim();
-                        let label = splits.next().unwrap_or(url).trim();
-                        if ui.hyperlink_to(label, url).clicked() {
-                            goto_url = Some(url.to_string());
+                if self.mimetype == "text/gemini" {
+                    let mut preformatted = false;
+                    for line in self.contents.lines() {
+                        if line.starts_with("#") {
+                            ui.heading(line.trim_start_matches('#').trim_start());
+                        } else if line.starts_with("=>") {
+                            let mut splits = line.splitn(3, |c: char| c.is_whitespace());
+                            let _ = splits.next();
+                            let url = splits.next().unwrap_or_default().trim();
+                            let label = splits.next().unwrap_or(url).trim();
+                            if ui.hyperlink_to(label, url).clicked() {
+                                goto_url = Some(url.to_string());
+                            }
+                        } else if line.starts_with("```") {
+                            preformatted = !preformatted;
+                        } else if preformatted {
+                            ui.monospace(line);
+                        } else {
+                            ui.label(line);
                         }
-                    } else if line.starts_with("```") {
-                        preformatted = !preformatted;
-                    } else if preformatted {
-                        ui.monospace(line);
-                    } else {
-                        ui.label(line);
                     }
+                } else {
+                    ui.monospace(&self.contents);
                 }
             });
         });
-
-        if let Some(url) = goto_url {
-            self.go_to_url(url);
-        }
 
         {
             let mut output = ctx.output();
@@ -110,6 +113,14 @@ impl epi::App for App {
             }
             // Kill default hyperlink behavior.
             output.open_url = None;
+        }
+
+        if let Some(url) = goto_url {
+            if url.starts_with("http") {
+                ctx.output().open_url = Some(OpenUrl::new_tab(url));
+            } else {
+                self.go_to_url(url);
+            }
         }
     }
 
