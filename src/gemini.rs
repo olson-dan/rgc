@@ -97,6 +97,14 @@ pub async fn request(base: &str, url: &str) -> (String, String, String) {
             GeminiStatus::Success(_, meta) => {
                 (url, meta.trim().to_string(), String::from(contents))
             }
+            GeminiStatus::Redirect(_, meta) => (
+                url,
+                "text/gemini".to_string(),
+                format!(
+                    "The requested URL has been redirected. Please click on the link below.\r\n=> {}",
+                    meta
+                ),
+            ),
             _ => (
                 url.clone(),
                 plain,

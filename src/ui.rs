@@ -1,6 +1,7 @@
 use crate::gemini::request;
 use eframe::{egui, epi};
 use egui::output::OpenUrl;
+use egui::Align;
 use std::sync::{Arc, Mutex};
 
 #[derive(PartialEq, Eq)]
@@ -42,6 +43,7 @@ impl epi::App for App {
     fn update(&mut self, ctx: &egui::CtxRef, _frame: &mut epi::Frame<'_>) {
         let mut loading = false;
         let mut goto_url = None;
+        let mut scroll_to_top = false;
         {
             let state = &mut *self.state.lock().unwrap();
             if let AppState::NewContent(url, mimetype, content) = state {
@@ -49,6 +51,7 @@ impl epi::App for App {
                 self.url_stack.push(self.url.clone());
                 self.contents = content.clone();
                 self.mimetype = mimetype.clone();
+                scroll_to_top = true;
                 *state = AppState::Browsing;
             } else if AppState::Loading == *state {
                 loading = true;
@@ -78,6 +81,9 @@ impl epi::App for App {
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::auto_sized().show(ui, |ui| {
+                if scroll_to_top {
+                    ui.scroll_to_cursor(Align::TOP);
+                }
                 if self.mimetype == "text/gemini" {
                     let mut preformatted = false;
                     for line in self.contents.lines() {
