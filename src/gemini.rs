@@ -4,42 +4,36 @@ use async_std::prelude::*;
 use url::Url;
 
 #[derive(Debug)]
-pub enum GeminiStatus {
-    Input(u32, String),
-    Success(u32, String),
-    Redirect(u32, String),
-    TemporaryFailure(u32, String),
-    PermanentFailure(u32, String),
-    ClientCertificateRequired(u32, String),
-    InvalidResponse(String),
+pub enum GeminiStatus<'a> {
+    Input(u32, &'a str),
+    Success(u32, &'a str),
+    Redirect(u32, &'a str),
+    TemporaryFailure(u32, &'a str),
+    PermanentFailure(u32, &'a str),
+    ClientCertificateRequired(u32, &'a str),
+    InvalidResponse(&'a str),
 }
 
-impl GeminiStatus {
-    pub fn from_response(response: &str) -> GeminiStatus {
+impl<'a> GeminiStatus<'a> {
+    pub fn from_response(response: &str) -> GeminiStatus<'_> {
         if response.len() < 2 {
-            return GeminiStatus::InvalidResponse(response.to_string());
+            return GeminiStatus::InvalidResponse(response);
         }
         let (code, meta) = response.split_at(2);
         let code = if let Ok(val) = code.parse::<u32>() {
             val
         } else {
-            return GeminiStatus::InvalidResponse(response.to_string());
+            return GeminiStatus::InvalidResponse(response);
         };
-        let meta = String::from(meta.trim());
-        if code >= 10 && code < 20 {
-            GeminiStatus::Input(code, meta)
-        } else if code >= 20 && code < 30 {
-            GeminiStatus::Success(code, meta)
-        } else if code >= 30 && code < 40 {
-            GeminiStatus::Redirect(code, meta)
-        } else if code >= 40 && code < 50 {
-            GeminiStatus::TemporaryFailure(code, meta)
-        } else if code >= 50 && code < 60 {
-            GeminiStatus::PermanentFailure(code, meta)
-        } else if code >= 60 && code < 70 {
-            GeminiStatus::ClientCertificateRequired(code, meta)
-        } else {
-            GeminiStatus::InvalidResponse(response.to_string())
+        let meta = meta.trim();
+        match code {
+            10..=19 => GeminiStatus::Input(code, meta),
+            20..=29 => GeminiStatus::Success(code, meta),
+            30..=39 => GeminiStatus::Redirect(code, meta),
+            40..=49 => GeminiStatus::TemporaryFailure(code, meta),
+            50..=59 => GeminiStatus::PermanentFailure(code, meta),
+            60..=69 => GeminiStatus::ClientCertificateRequired(code, meta),
+            _ => GeminiStatus::InvalidResponse(response),
         }
     }
 

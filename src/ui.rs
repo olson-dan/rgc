@@ -1,6 +1,5 @@
 use crate::gemini::request;
 use eframe::{egui, epi};
-use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 
 #[derive(PartialEq, Eq)]
@@ -26,13 +25,13 @@ pub struct App {
 impl App {
     fn go_to_url(&mut self, url: String) {
         let previous_url = self.url_stack.last().cloned().unwrap_or_default();
-        let mut state = self.state.lock().unwrap();
-        *state.deref_mut() = AppState::Loading;
+        let state = &mut *self.state.lock().unwrap();
+        *state = AppState::Loading;
         let task_state = self.state.clone();
         async_std::task::spawn(async move {
             let (url, contents) = request(&previous_url, &url).await;
-            let mut state = task_state.lock().unwrap();
-            *state.deref_mut() = AppState::NewContent(url, contents);
+            let state = &mut *task_state.lock().unwrap();
+            *state = AppState::NewContent(url, contents);
         });
     }
 }
@@ -42,13 +41,13 @@ impl epi::App for App {
         let mut loading = false;
         let mut goto_url = None;
         {
-            let mut state = self.state.lock().unwrap();
-            if let AppState::NewContent(url, content) = state.deref() {
+            let state = &mut *self.state.lock().unwrap();
+            if let AppState::NewContent(url, content) = state {
                 self.url = url.clone();
                 self.url_stack.push(self.url.clone());
                 self.contents = content.clone();
-                *state.deref_mut() = AppState::Browsing;
-            } else if AppState::Loading == *state.deref() {
+                *state = AppState::Browsing;
+            } else if AppState::Loading == *state {
                 loading = true;
             }
         }
